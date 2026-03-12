@@ -2,111 +2,144 @@ import streamlit as st
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+import seaborn as sns
 from sklearn.datasets import make_moons
+import numpy as np
 
 st.title("Interactive ANN Visualizer")
 
 # Sidebar controls
 st.sidebar.header("Network Configuration")
 
-input_nodes = st.sidebar.slider("Input Nodes", 2, 5, 2)
-hidden_nodes = st.sidebar.slider("Hidden Nodes", 1, 10, 5)
-output_nodes = st.sidebar.slider("Output Nodes", 1, 2, 1)
+input_nodes = st.sidebar.slider("Input Nodes", 1, 10, 2)
+hidden_nodes = st.sidebar.slider("Hidden Nodes", 1, 20, 5)
+output_nodes = st.sidebar.slider("Output Nodes", 1, 5, 1)
 epochs = st.sidebar.slider("Training Epochs", 10, 200, 50)
 
-# Dataset
-X, y = make_moons(n_samples=200, noise=0.2)
-X = torch.tensor(X).float()
-y = torch.tensor(y.reshape(-1,1)).float()
-
-# Neural network model
+# Neural Network
 class ANN(nn.Module):
+
     def __init__(self):
         super().__init__()
+
         self.fc1 = nn.Linear(input_nodes, hidden_nodes)
         self.fc2 = nn.Linear(hidden_nodes, output_nodes)
 
     def forward(self, x):
+
         x = torch.relu(self.fc1(x))
         x = torch.sigmoid(self.fc2(x))
+
         return x
+
 
 model = ANN()
 
-# Visualization: network structure
-def draw_network():
-    G = nx.DiGraph()
+# Dataset
+X, y = make_moons(n_samples=200, noise=0.2)
 
-    inputs = [f"I{i}" for i in range(input_nodes)]
-    hidden = [f"H{i}" for i in range(hidden_nodes)]
-    outputs = [f"O{i}" for i in range(output_nodes)]
+X = torch.tensor(X, dtype=torch.float32)
+y = torch.tensor(y.reshape(-1,1), dtype=torch.float32)
 
-    G.add_nodes_from(inputs)
-    G.add_nodes_from(hidden)
-    G.add_nodes_from(outputs)
+# Training
+losses = []
 
-    for i in inputs:
-        for h in hidden:
-            G.add_edge(i, h)
-
-    for h in hidden:
-        for o in outputs:
-            G.add_edge(h, o)
-
-    pos = nx.spring_layout(G)
-
-    fig, ax = plt.subplots()
-    nx.draw(G, pos, with_labels=True, node_color="skyblue", ax=ax)
-
-    st.pyplot(fig)
-
-st.subheader("Neural Network Structure")
-draw_network()
-
-# Train model
 if st.button("Train Model"):
 
     optimizer = optim.Adam(model.parameters(), lr=0.01)
-    criterion = nn.BCELoss()
+    loss_fn = nn.BCELoss()
 
-    loss_history = []
+    loss_chart = st.empty()
 
     for epoch in range(epochs):
+
         optimizer.zero_grad()
 
         output = model(X)
-        loss = criterion(output, y)
+
+        loss = loss_fn(output, y)
 
         loss.backward()
+
         optimizer.step()
 
-        loss_history.append(loss.item())
+        losses.append(loss.item())
 
-    st.success("Training Complete")
+        loss_chart.line_chart(losses)
 
-    # Loss graph
-    st.subheader("Training Loss")
-    st.line_chart(loss_history)
+    st.success("Training Completed")
 
-    # Decision boundary
-    st.subheader("Decision Boundary")
-
-    xx, yy = np.meshgrid(
-        np.linspace(-2,3,100),
-        np.linspace(-1.5,2,100)
-    )
-
-    grid = np.c_[xx.ravel(), yy.ravel()]
-    grid_tensor = torch.tensor(grid).float()
-
-    preds = model(grid_tensor).detach().numpy()
-    preds = preds.reshape(xx.shape)
+# Loss Graph
+if len(losses) > 0:
 
     fig, ax = plt.subplots()
-    ax.contourf(xx, yy, preds, cmap="coolwarm", alpha=0.6)
-    ax.scatter(X[:,0], X[:,1], c=y.numpy(), cmap="coolwarm")
+
+    ax.plot(losses)
+
+    ax.set_title("Training Loss")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
 
     st.pyplot(fig)
+
+# Neural Network Diagram
+st.subheader("Neural Network Structure")
+
+G = nx.DiGraph()
+
+# Nodes
+for i in range(input_nodes):
+    G.add_node(f"I{i}")
+
+for i in range(hidden_nodes):
+    G.add_node(f"H{i}")
+
+for i in range(output_nodes):
+    G.add_node(f"O{i}")
+
+# Connections
+for i in range(input_nodes):
+    for j in range(hidden_nodes):
+        G.add_edge(f"I{i}", f"H{j}")
+
+for i in range(hidden_nodes):
+    for j in range(output_nodes):
+        G.add_edge(f"H{i}", f"O{j}")
+
+# Positioning nodes
+pos = {}
+
+for i in range(input_nodes):
+    pos[f"I{i}"] = (0, i)
+
+for i in range(hidden_nodes):
+    pos[f"H{i}"] = (1, i)
+
+for i in range(output_nodes):
+    pos[f"O{i}"] = (2, i)
+
+fig, ax = plt.subplots()
+
+nx.draw(
+    G,
+    pos,
+    with_labels=True,
+    node_color="lightblue",
+    node_size=1500,
+    arrows=True
+)
+
+st.pyplot(fig)
+
+# Weight Heatmap
+st.subheader("Weight Heatmap")
+
+weights = model.fc1.weight.detach().numpy()
+
+fig, ax = plt.subplots()
+
+sns.heatmap(weights, cmap="coolwarm", ax=ax)
+
+st.pyplot(fig)
