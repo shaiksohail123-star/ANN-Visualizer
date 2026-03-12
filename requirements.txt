@@ -1,7 +1,8 @@
-﻿streamlit
+streamlit
 torch
 numpy
 pandas
 matplotlib
 scikit-learn
 networkx
+seaborn
